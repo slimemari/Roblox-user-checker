@@ -46,11 +46,12 @@ function randomName(n,set){let s=""; for(let i=0;i<n;i++) s+=set[Math.floor(Math
 
 async function checkServer(){
   try{
-    const r=await fetch("/api/check?username=Test_"+Math.floor(Math.random()*999999),{cache:"no-store"});
-    if(r.status===429) return {ok:false,rate:true};
-    if(!r.ok) return {ok:false};
-    const d=await r.json();
-    return {ok:true};
+    const r=await fetch("/health",{cache:"no-store"});
+    if(r.ok){
+      const d=await r.json();
+      return {ok:d.ok===true};
+    }
+    return {ok:false};
   }catch(e){return {ok:false};}
 }
 (async()=>{
