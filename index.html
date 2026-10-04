@@ -3,159 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roblox Username Availability Checker</title>
+<title>Short Username Checker</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#0b0d12;color:#f5f7fb;min-height:100vh}
-.wrap{max-width:900px;margin:auto;padding:32px 18px}
-.card{background:#141821;border:1px solid #252b37;border-radius:18px;padding:22px;box-shadow:0 15px 45px #0005}
-h1{margin:0 0 8px;font-size:28px}.sub{color:#9da6b5;margin-bottom:22px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:650px){.grid{grid-template-columns:1fr}}
-label{display:block;color:#b7bfcc;font-size:13px;margin-bottom:7px}
-select,input{width:100%;background:#0d1016;color:#fff;border:1px solid #303746;border-radius:10px;padding:12px;font-size:15px}
-.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-button{border:0;border-radius:10px;padding:12px 17px;font-weight:700;cursor:pointer}
-.primary{background:#fff;color:#111}.stop{background:#2a303b;color:#fff}.primary:disabled{opacity:.45;cursor:not-allowed}
-.status{margin-top:20px;padding:15px;border-radius:12px;background:#0d1016;border:1px solid #252b37}
-.status b{font-size:18px}.muted{color:#929bab}.available{color:#7ff0a5}.taken{color:#ff8f8f}
-.results{margin-top:14px;max-height:390px;overflow:auto;border:1px solid #252b37;border-radius:12px}
-.item{display:flex;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid #202631}.item:last-child{border-bottom:0}
-.small{font-size:12px}.pill{padding:4px 8px;border-radius:99px;background:#202633}
-.notice{font-size:13px;line-height:1.5;color:#aab3c2;margin-top:14px}
-code{background:#202633;padding:2px 5px;border-radius:5px}
+body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;background:#111;color:#eee}
+.card{background:#1b1b1b;padding:20px;border-radius:14px;margin-bottom:16px}
+label{display:block;margin:10px 0 6px}select,input,button{font:inherit;padding:10px;border-radius:8px;border:1px solid #444;background:#222;color:#fff}
+button{cursor:pointer;margin:6px 6px 0 0}#status{font-weight:700}.ok{color:#5ee37b}.warn{color:#ffd166}.bad{color:#ff6b6b}
+#results{max-height:360px;overflow:auto;font-family:monospace;white-space:pre-wrap}
+.small{opacity:.75;font-size:.9rem}
 </style>
 </head>
 <body>
-<div class="wrap">
 <div class="card">
-<h1>Roblox Username Availability Checker</h1>
-<div class="sub">Generates short usernames and checks them one at a time. The checker stops when it finds an available username.</div>
-
-<div class="grid">
-<div>
+<h1>Short Username Checker</h1>
+<p>Generates 3- or 4-character Roblox usernames and checks them one at a time.</p>
+<p id="connection" class="warn">Connecting to Render server…</p>
+</div>
+<div class="card">
 <label>Platform</label>
-<select id="platform"><option value="roblox">Roblox</option><option value="discord">Discord — not supported</option></select>
-</div>
-<div>
+<select id="platform"><option value="roblox">Roblox</option></select>
 <label>Username length</label>
-<select id="length"><option value="3">3 characters</option><option value="4" selected>4 characters</option></select>
-</div>
-<div>
+<select id="length"><option value="3">3</option><option value="4">4</option></select>
 <label>Characters</label>
-<select id="charset"><option value="letters">Letters only</option><option value="lettersnumbers">Letters + numbers</option></select>
+<select id="chars"><option value="letters">Letters only</option><option value="alnum">Letters + numbers</option></select>
+<label>Delay between checks (ms)</label>
+<input id="delay" type="number" min="2000" step="500" value="2000">
+<br>
+<button id="start">Start</button><button id="stop" disabled>Stop</button><button id="clear">Clear</button>
+<p id="status">Ready.</p>
 </div>
-<div>
-<label>Check delay (ms)</label>
-<input id="delay" type="number" min="1500" step="100" value="2000">
+<div class="card">
+<h2>Results</h2>
+<div id="results"></div>
 </div>
-</div>
-
-<div class="row">
-<button class="primary" id="start">Start checking</button>
-<button class="stop" id="stop" disabled>Stop</button>
-<button class="stop" id="clear">Clear results</button>
-</div>
-
-<div class="status">
-<b id="headline">Ready</b>
-<div id="detail" class="muted">Start the local server, then press Start checking.</div>
-</div>
-
-<div class="results" id="results"></div>
-
-<div class="notice">
-This version uses a small local server so the browser does not call Roblox directly from a <code>content://</code> page.
-It does not create accounts, collect passwords, or bypass Roblox protections. If Roblox rate-limits the server,
-the checker stops and tells you to wait rather than trying to bypass the limit.
-</div>
-</div>
-</div>
-
 <script>
 const $=id=>document.getElementById(id);
-let running=false,checked=0,used=new Set();
+let running=false, checked=new Set();
+const letters="abcdefghijklmnopqrstuvwxyz", alnum=letters+"0123456789";
 
-function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-function randomName(n,mode){
-  const letters="abcdefghijklmnopqrstuvwxyz";
-  const chars=mode==="lettersnumbers"?letters+"0123456789":letters;
-  let s="";
-  for(let i=0;i<n;i++) s+=chars[Math.floor(Math.random()*chars.length)];
-  return s;
+function log(s){$("results").textContent += s+"\n"; $("results").scrollTop=$("results").scrollHeight;}
+function randomName(n,set){let s=""; for(let i=0;i<n;i++) s+=set[Math.floor(Math.random()*set.length)]; return s;}
+
+async function checkServer(){
+  try{
+    const r=await fetch("/api/check?username=Test_"+Math.floor(Math.random()*999999),{cache:"no-store"});
+    if(r.status===429) return {ok:false,rate:true};
+    if(!r.ok) return {ok:false};
+    const d=await r.json();
+    return {ok:true};
+  }catch(e){return {ok:false};}
 }
-function addResult(name,state,extra=""){
-  const row=document.createElement("div");
-  row.className="item";
-  row.innerHTML=`<span><b>${name}</b>${extra?` <span class="small muted">${extra}</span>`:""}</span>
-  <span class="pill ${state==="Available"?"available":"taken"}">${state}</span>`;
-  $("results").prepend(row);
-}
+(async()=>{
+  const r=await checkServer();
+  if(r.ok){$("connection").textContent="✓ Connected to the Render server";$("connection").className="ok";}
+  else if(r.rate){$("connection").textContent="⚠ Render is connected, but Roblox is rate-limiting requests right now";$("connection").className="warn";}
+  else {$("connection").textContent="✕ Could not reach the Render checking endpoint";$("connection").className="bad";}
+})();
+
 async function robloxCheck(name){
-  const r=await fetch("/api/check?username="+encodeURIComponent(name),{
-    headers:{Accept:"application/json"}
-  });
-  let d={};
-  try{d=await r.json()}catch(e){}
-  if(!r.ok){
-    const err=new Error(d.error||("Server returned HTTP "+r.status));
-    err.status=r.status;
-    throw err;
-  }
-  return !!d.available;
+  try{
+    const r=await fetch("/api/check?username="+encodeURIComponent(name),{cache:"no-store"});
+    let d={}; try{d=await r.json()}catch{}
+    if(r.status===429 || d.rateLimited) return {rateLimited:true};
+    if(!r.ok) return {error:d.error||("HTTP "+r.status)};
+    return {available:d.available===true, code:d.code};
+  }catch(e){return {error:"Could not reach the Render server"};}
 }
-async function start(){
+
+$("start").onclick=async()=>{
   if(running)return;
-  if($("platform").value!=="roblox"){
-    $("headline").textContent="Discord checking isn't enabled";
-    $("detail").textContent="This version only checks Roblox usernames.";
-    return;
-  }
-  running=true;checked=0;used.clear();
-  $("start").disabled=true;$("stop").disabled=false;
-  $("headline").textContent="Checking…";
-  $("detail").textContent="Searching for an available username.";
+  running=true;$("start").disabled=true;$("stop").disabled=false;
+  const n=Number($("length").value), set=$("chars").value==="letters"?letters:alnum;
+  const delay=Math.max(2000,Number($("delay").value)||2000);
+  $("status").textContent="Checking…";
   while(running){
-    let name;
-    do{name=randomName(+$("length").value,$("charset").value)}while(used.has(name));
-    used.add(name);
-    try{
-      const available=await robloxCheck(name);
-      checked++;
-      if(available){
-        addResult(name,"Available");
-        $("headline").textContent="🎉 Username available!";
-        $("detail").textContent=`Found "${name}" after ${checked} check${checked===1?"":"s"}.`;
-        running=false;
-        try{new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=").play()}catch(e){}
-        break;
-      }else{
-        addResult(name,"Taken");
-        $("detail").textContent=`Checked ${checked} username${checked===1?"":"s"}…`;
-      }
-    }catch(e){
-      running=false;
-      $("headline").textContent=e.status===429?"Roblox rate limit reached":"Check stopped";
-      $("detail").textContent=e.message||"The server could not complete the Roblox request.";
-      break;
+    let name=randomName(n,set);
+    if(checked.has(name)) continue;
+    checked.add(name);
+    const res=await robloxCheck(name);
+    if(res.rateLimited){
+      log("RATE LIMITED — stopped safely. Wait and try again later.");
+      $("status").textContent="Stopped: Roblox rate-limited the checker.";
+      running=false;break;
     }
-    await sleep(Math.max(1500,+$("delay").value||2000));
+    if(res.error){
+      log("ERROR "+name+" — "+res.error);
+      $("status").textContent="Stopped: server/request error.";
+      running=false;break;
+    }
+    if(res.available){
+      log("✓ AVAILABLE: "+name);
+      $("status").textContent="Available username found: "+name;
+      try{new AudioContext().resume().then(()=>{const a=new AudioContext();const o=a.createOscillator();o.connect(a.destination);o.start();o.stop(a.currentTime+.25)})}catch{}
+      running=false;break;
+    }else log("✗ TAKEN: "+name);
+    await new Promise(r=>setTimeout(r,delay));
   }
   $("start").disabled=false;$("stop").disabled=true;
-}
-$("start").onclick=start;
-$("stop").onclick=()=>{
-  running=false;
-  $("headline").textContent="Stopped";
-  $("detail").textContent=`Checked ${checked} username${checked===1?"":"s"}.`;
-  $("start").disabled=false;$("stop").disabled=true;
 };
-$("clear").onclick=()=>{
-  $("results").innerHTML="";
-  $("headline").textContent="Ready";
-  $("detail").textContent="Start the local server, then press Start checking.";
-  checked=0;used.clear();
-};
+$("stop").onclick=()=>{running=false;$("status").textContent="Stopped.";};
+$("clear").onclick=()=>{$("results").textContent="";checked.clear();$("status").textContent="Ready.";};
 </script>
 </body>
 </html>

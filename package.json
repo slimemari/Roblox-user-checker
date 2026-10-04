@@ -1,9 +1,6 @@
 {
-  "name": "roblox-username-checker",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Local Roblox username availability checker",
-  "scripts": {
-    "start": "node server.js"
-  }
+  "name":"roblox-username-checker",
+  "version":"1.0.0",
+  "private":true,
+  "scripts":{"start":"node server.js"}
 }
